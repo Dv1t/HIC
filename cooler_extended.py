@@ -1,6 +1,9 @@
 import cooler
+import numpy
 import numpy as np
-
+import math
+from scipy import stats
+import savitzky_golay
 
 def distribution_at_dist(arr, d):
     n = arr.shape[0]
@@ -23,8 +26,11 @@ class CoolerExtended(cooler.Cooler):
     def __init__(self, filepath):
         super().__init__(filepath)
         self.hic_matrices_normalized = {}
+        self.bases_in_bin = self.binsize
         for current_chr in self.chromnames:
             mat = self.matrix(balance=False).fetch(current_chr)
+            if "chr" not in current_chr:
+                current_chr = "chr" + current_chr
             mat_nan = self.__zeros_to_nan(mat)
             mat_norm = normalize_intra(mat_nan)
             self.hic_matrices_normalized[current_chr] = mat_norm
@@ -37,5 +43,44 @@ class CoolerExtended(cooler.Cooler):
                 arr[i] = np.nan
                 arr[:, i] = np.nan
         return arr
+
+    def get_hic_score(self, table, chr_number, need_convert_to_bin=False, min_bin_dist=1, max_bin_dist=math.inf):
+        if "chr" not in chr_number:
+            chr_number = "chr" + chr_number
+        if need_convert_to_bin:
+            bins_x = table["start1"] // self.bases_in_bin
+            bins_y = table["start2"] // self.bases_in_bin
+        else:
+            bins_x = table["start1"]
+            bins_y = table["start2"]
+        bins_ok = ((bins_x - bins_y).abs() > min_bin_dist) & ((bins_x - bins_y).abs() < max_bin_dist)
+        bins_x = bins_x[bins_ok]
+        bins_y = bins_y[bins_ok]
+        hic_score = []
+        for x, y in zip(bins_x, bins_y):
+            try:
+                if not math.isnan(self.hic_matrices_normalized[chr_number][x][y]):
+                    hic_score.append(self.hic_matrices_normalized[chr_number][x][y])
+            except IndexError:
+                pass
+        return hic_score
+
+    def calculate_quality(self, chr_number):
+        quality_distribution = []
+        for dist in range(self.hic_matrices_normalized[chr_number].shape[0]):
+            quality_distribution.append(float(stats.skew(np.diagonal(self.hic_matrices_normalized[chr_number], dist), nan_policy='omit')))
+        quality_distribution = savitzky_golay.savitzky_golay(np.asarray(quality_distribution), 31, 4)
+        return quality_distribution
+
+    def calculate_mean_minus_median(self, chr_number):
+        result = []
+        for dist in range(self.hic_matrices_normalized[chr_number].shape[0]):
+            diagonal = np.diagonal(self.hic_matrices_normalized[chr_number], dist)
+            diagonal = diagonal[~np.isnan(diagonal)]
+            if len(diagonal) == 0:
+                continue
+            result.append(np.nanmean(diagonal) - np.percentile(diagonal, 50))
+        result = savitzky_golay.savitzky_golay(np.asarray(result), 31, 4)
+        return result
 
 
