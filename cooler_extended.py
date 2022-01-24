@@ -1,7 +1,8 @@
 import cooler
-import numpy
 import numpy as np
 import math
+
+import pandas
 from scipy import stats
 import savitzky_golay
 
@@ -44,7 +45,7 @@ class CoolerExtended(cooler.Cooler):
                 arr[:, i] = np.nan
         return arr
 
-    def get_hic_score(self, table, chr_number, need_convert_to_bin=False, min_bin_dist=1, max_bin_dist=math.inf):
+    def get_hic_score(self, table, chr_number, need_convert_to_bin=True, min_bin_dist=1, max_bin_dist=math.inf):
         if "chr" not in chr_number:
             chr_number = "chr" + chr_number
         if need_convert_to_bin:
@@ -53,14 +54,16 @@ class CoolerExtended(cooler.Cooler):
         else:
             bins_x = table["start1"]
             bins_y = table["start2"]
-        bins_ok = ((bins_x - bins_y).abs() > min_bin_dist) & ((bins_x - bins_y).abs() < max_bin_dist)
+
+        bins_ok = [(abs(bin_x - bin_y) > min_bin_dist) & (abs(bin_x - bin_y) < max_bin_dist) for bin_x, bin_y
+                   in zip(bins_x, bins_y)]
         bins_x = bins_x[bins_ok]
         bins_y = bins_y[bins_ok]
         hic_score = []
         for x, y in zip(bins_x, bins_y):
             try:
                 if not math.isnan(self.hic_matrices_normalized[chr_number][x][y]):
-                    hic_score.append(self.hic_matrices_normalized[chr_number][x][y])
+                    hic_score.append(float(self.hic_matrices_normalized[chr_number][x][y]))
             except IndexError:
                 pass
         return hic_score

@@ -1,117 +1,84 @@
-import math
-import numpy as np
-import  pandas as pd
-import matplotlib.pyplot as plt
-
+import pandas as pd
 import combination_classification
-from  cooler_extended import  CoolerExtended
+from cooler_extended import CoolerExtended
 import seaborn as sns
-from scipy import stats
-#%%
+import numpy as np
 
-filepath = "data/HiC40к80k200к400к800к.mcool::/resolutions/200000"
+resolution = 40
+tissue_type = "prost"
+filepath = f"data/HiC40к80k200к400к800к.mcool::/resolutions/{resolution*1000}"
 c = CoolerExtended(filepath)
 bases_in_bin = c.binsize
-sv_master_table = pd.read_csv("result2.csv",delimiter = "\t")
+sv_master_table = pd.read_csv(f"result_{tissue_type}.csv", delimiter="\t")
 
-#%%
-chomosomes = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,"X"]
-sv_hic_score = []
-chr_hic_score = []
-hic_sv_sv_d = []
-hic_sv_sv_s = []
-hic_sv_chr_d = []
-hic_sv_chr_s = []
-hic_chr_chr_d = []
-hic_chr_chr_s = []
-chr_shift_hic_score = []
-sv_shift_hic_score = []
+chomosomes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, "X"]
+all_hic_df = pd.DataFrame(columns=['score', 'type'])
+
+
+def getShiftedBins(sv):
+    sv_bins_x = sv["start1"]
+    sv_bins_y = sv["start2"]
+    sv_shift_bins_x = (sv_bins_x//bases_in_bin+10 % matrix.shape[0])*bases_in_bin
+    sv_shift_bins_y = (sv_bins_y//bases_in_bin+10 % matrix.shape[0])*bases_in_bin
+    sv_shift_bins = pd.DataFrame({"start1": sv_shift_bins_x, "start2": sv_shift_bins_y})
+    return sv_shift_bins
+
 
 for cr_number in chomosomes:
     chr_number = cr_number.__str__()
-    #getting normilized hiс matrix by chromosome
-    matrix = c.hic_matrices_normalized["chr"+chr_number]
-    #getting SVs
-    sv_for_chr = sv_master_table[sv_master_table["chrom1"]==chr_number][sv_master_table["chrom2"]==chr_number][sv_master_table["chromo_label1"]!="High confidence"]
-    sv_bins_x = sv_for_chr["start1"] // bases_in_bin
-    sv_bins_y = sv_for_chr["start2"] // bases_in_bin
-    sv_ok = (sv_bins_x - sv_bins_y).abs() > 1
-    sv_bins_x = sv_bins_x[sv_ok]
-    sv_bins_y = sv_bins_y[sv_ok]
+    # getting normilized hiс matrix by chromosome
+    matrix = c.hic_matrices_normalized["chr" + chr_number]
+    # getting SVs
+    sv_for_current_chr = sv_master_table[sv_master_table["chrom1"] == chr_number][
+        sv_master_table["chrom2"] == chr_number]
 
-    sv_hic_score.extend(c.get_hic_score(sv_for_chr, chr_number, True))
+    sv_for_chr = sv_for_current_chr[sv_for_current_chr["chromo_label1"] != "High confidence"]
+    chr_for_hic = sv_for_current_chr[sv_for_current_chr["chromo_label1"] == "High confidence"]
 
-    chr_for_hic = sv_master_table[sv_master_table["chrom1"]==chr_number][sv_master_table["chrom2"]==chr_number][sv_master_table["chromo_label1"]=="High confidence"]
+    sv_for_chr = sv_for_chr.drop(columns=['unique_id', 'sv_file_id', 'chrom1', 'chrom2',
+                                          'sv_id', 'pe_support', 'strand1', 'strand2', 'svclass',
+                                          'svmethod', 'chromo_label1', 'chromo_label2'])
+    chr_for_hic = chr_for_hic.drop(columns=['unique_id', 'sv_file_id', 'chrom1', 'chrom2',
+                                            'sv_id', 'pe_support', 'strand1', 'strand2', 'svclass',
+                                            'svmethod', 'chromo_label1', 'chromo_label2'])
+    sv_for_chr['combination_class'] = 'sv'
+    chr_for_hic['combination_class'] = 'chromo'
 
-    if not chr_for_hic.empty:
-        chr_hic_score.extend(c.get_hic_score(chr_for_hic, chr_number, True))
-        chr_bins_x = []
-        chr_bins_y = []
-        for x,y in zip(chr_for_hic["start1"].tolist(),chr_for_hic["start2"].tolist()):
-                if abs((x//bases_in_bin)-(y//bases_in_bin))>1:
-                    chr_bins_x.append(x//bases_in_bin)
-                    chr_bins_y.append(y//bases_in_bin)
-        chr_shift_bins_x = []
-        chr_shift_bins_y = []
-        for x,y in zip(chr_bins_x, chr_bins_y):
-            chr_shift_bins_x.append((x+10) % matrix.shape[0])
-            chr_shift_bins_y.append((y+10) % matrix.shape[0])
-        chr_shift_bins = pd.DataFrame(list(zip(chr_shift_bins_x, chr_shift_bins_y)))
-        chr_shift_bins.columns = ["start1", "start2"]
-        chr_shift_hic_score.extend(c.get_hic_score(chr_shift_bins, chr_number))
+    sv_shifted = getShiftedBins(sv_for_chr)
+    sv_shifted['combination_class'] = 'sv_shift_5mb'
 
-    sv_shift_bins_x = []
-    sv_shift_bins_y = []
-    for x,y in zip(sv_bins_x,sv_bins_y):
-        sv_shift_bins_x.append((x+10)%matrix.shape[0])
-        sv_shift_bins_y.append((y+10)%matrix.shape[0])
-    sv_shift_bins = pd.DataFrame(list(zip(sv_shift_bins_x, sv_shift_bins_y)))
-    sv_shift_bins.columns = ["start1", "start2"]
-    sv_shift_hic_score.extend(c.get_hic_score(sv_shift_bins, chr_number))
+    chr_shifted = getShiftedBins(chr_for_hic)
+    chr_shifted['combination_class'] = 'chromo_shift_5mb'
 
-    mixed_bins = combination_classification.get_combinations_data_frame("sv_combinations_csv/sv_combinations", cr_number)
+    mixed_bins = combination_classification.get_combinations_data_frame(
+        f"{tissue_type}_sv_combinations/{tissue_type}_sv_combinations", cr_number)
 
-    sv_sv_d = mixed_bins[mixed_bins.combination_class == "sv_sv_d"]
-    sv_sv_s = mixed_bins[mixed_bins.combination_class == "sv_sv_s"]
-    sv_chr_d = mixed_bins[mixed_bins.combination_class == "sv_chromo_d"]
-    sv_chr_s = mixed_bins[mixed_bins.combination_class == "sv_chromo_s"]
-    chr_chr_s = mixed_bins[mixed_bins.combination_class == "chromo_chromo_s"]
-    chr_chr_d = mixed_bins[mixed_bins.combination_class == "chromo_chromo_d"]
+    bins_array = sv_for_chr.append(chr_for_hic)
+    bins_array = bins_array.append(sv_shifted)
+    bins_array = bins_array.append(chr_shifted)
+    bins_array = bins_array.append(mixed_bins)
 
-    hic_sv_sv_d.extend(c.get_hic_score(sv_sv_d, chr_number, True))
-    hic_sv_sv_s.extend(c.get_hic_score(sv_sv_s, chr_number, True))
-    hic_sv_chr_d.extend(c.get_hic_score(sv_chr_d, chr_number, True))
-    hic_sv_chr_s.extend(c.get_hic_score(sv_chr_s, chr_number, True))
-    hic_chr_chr_d.extend(c.get_hic_score(chr_chr_d, chr_number, True))
-    hic_chr_chr_s.extend(c.get_hic_score(chr_chr_s, chr_number, True))
-#%%
+    bins_array = bins_array.groupby(['combination_class'], as_index=False).agg({'start1': list, 'start2': list})
+
+    hic_array = [[c.get_hic_score(row, chr_number), row['combination_class']] for index, row
+                 in bins_array.iterrows()]
+
+    hic_df = pd.DataFrame(hic_array, columns=['score', 'type'])
+    if all_hic_df.empty:
+        all_hic_df = all_hic_df.append(hic_df)
+    else:
+        all_hic_df['score'].append(hic_df['score'])
+
 sns.set_theme(style="whitegrid")
-sns.set(rc={'figure.figsize':(15,15)})
+sns.set(rc={'figure.figsize': (15, 15)})
 
-type_and_score = [[val, type]
-                  for vals, type in zip(
-                                        [chr_hic_score, sv_hic_score, chr_shift_hic_score, sv_shift_hic_score,hic_sv_sv_d, hic_sv_sv_s, hic_sv_chr_d, hic_sv_chr_s,hic_chr_chr_d,hic_chr_chr_s],
-                                        ['chromo','sv','chromo_shift_5mb','sv_shift_5mb','sv_sv_d','sv_sv_s','sv_chr_d','sv_chr_s','chr_chr_d','chr_chr_s']
-                                        )
-                  for val in vals]
-
-df = pd.DataFrame(type_and_score, columns=['score', 'type'])
-
-plot2 = sns.boxplot(data=df, x='type', y='score')
+plot2 = sns.boxplot(data=all_hic_df.explode('score'), x='type', y='score')
 plot2.set_title("All chromosomes")
-#plot2.set_yscale("log")
-plot2.set_ylim([0,3])
+# plot2.set_yscale("log")
+plot2.set_ylim([0, 3])
 plot2.axhline(1)
-plot2.figure.savefig("panc_boxplot_combinations500k_high.pdf")
+plot2.figure.savefig(f"{tissue_type}_boxplot_combinations{resolution}k.pdf")
 
-#%%
-print("chr_hic_score",np.nanmean(chr_hic_score),np.percentile((chr_hic_score),50))
-print("sv_hic_score",np.nanmean(sv_hic_score),np.percentile((sv_hic_score),50))
-print("chr_shift_hic_score",np.nanmean(chr_shift_hic_score),np.percentile((chr_shift_hic_score),50))
-print("sv_shift_hic_score",np.nanmean(sv_shift_hic_score),np.percentile((sv_shift_hic_score),50))
-print("hic_sv_sv_d",np.nanmean(hic_sv_sv_d),np.percentile((hic_sv_sv_d),50))
-print("hic_sv_sv_s",np.nanmean(hic_sv_sv_s),np.percentile((hic_sv_sv_s),50))
-print("hic_sv_chr_d",np.nanmean(hic_sv_chr_d),np.percentile((hic_sv_chr_d),50))
-print("hic_sv_chr_s",np.nanmean(hic_sv_chr_s),np.percentile((hic_sv_chr_s),50))
-print("hic_chr_chr_d",np.nanmean(hic_chr_chr_d),np.percentile((hic_chr_chr_d),50))
-print("hic_chr_chr_s",np.nanmean(hic_chr_chr_s),np.percentile((hic_chr_chr_s),50))
+for sv_type, sv_score in zip(all_hic_df["type"],all_hic_df["score"]):
+    print(resolution, sv_type, np.nanmean(sv_score))
+print('............................................')
