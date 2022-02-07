@@ -45,18 +45,17 @@ class CoolerExtended(cooler.Cooler):
                 arr[:, i] = np.nan
         return arr
 
-    def get_hic_score(self, table, chr_number, need_convert_to_bin=True, min_bin_dist=1, max_bin_dist=math.inf):
+    def get_hic_score(self, table, chr_number, need_convert_to_bin=True, min_bin_dist=60000, max_bin_dist=math.inf):
         if "chr" not in chr_number:
             chr_number = "chr" + chr_number
+        bins_x = table["start1"]
+        bins_y = table["start2"]
+
+        bins_ok = [(abs(bin_x - bin_y) > min_bin_dist) for bin_x, bin_y
+                   in zip(bins_x, bins_y)]
         if need_convert_to_bin:
             bins_x = table["start1"] // self.bases_in_bin
             bins_y = table["start2"] // self.bases_in_bin
-        else:
-            bins_x = table["start1"]
-            bins_y = table["start2"]
-
-        bins_ok = [(abs(bin_x - bin_y) > min_bin_dist) & (abs(bin_x - bin_y) < max_bin_dist) for bin_x, bin_y
-                   in zip(bins_x, bins_y)]
         bins_x = bins_x[bins_ok]
         bins_y = bins_y[bins_ok]
         hic_score = []
@@ -67,6 +66,18 @@ class CoolerExtended(cooler.Cooler):
             except IndexError:
                 pass
         return hic_score
+
+    def get_single_hic_score(self, start1, start2, chr_number, min_bin_dist=60000, max_bin_dist=math.inf):
+        if "chr" not in chr_number:
+            chr_number = "chr" + chr_number
+        if abs(start1 - start2) <= min_bin_dist:
+            return np.nan
+        start1 = start1 // self.bases_in_bin
+        start2 = start2 // self.bases_in_bin
+        try:
+            return self.hic_matrices_normalized[chr_number][start1][start2]
+        except IndexError:
+            return f'OutOfBounds for {self.hic_matrices_normalized[chr_number].shape[0]}'
 
     def calculate_quality(self, chr_number):
         quality_distribution = []

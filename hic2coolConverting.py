@@ -15,15 +15,17 @@ cooler.merge_coolers(output_uri="cool_files_pancreatic_50k/cool_merged.cool",
 from  cooler_extended import  CoolerExtended
 import matplotlib.pyplot as plt
 import numpy as np
+import cooler
 
-for chr in chomosomes:
-    c = CoolerExtended("cool_files_pancreatic_50k/cool_merged.cool")
-    matrix = c.hic_matrices_normalized["chr"+chr.__str__()]
-    fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(111)
-    im = ax.matshow(np.log10(matrix), cmap='YlOrRd')
-    fig.colorbar(im)
-    plt.show()
+
+c = cooler.Cooler("cool_files_pancreatic_100k/cool_merged.cool")
+arr2 = c.matrix(balance=False, sparse=True)[1000:1200, 1000:1200].toarray()
+
+fig = plt.figure(figsize=(10, 10))
+ax = fig.add_subplot(111)
+im = ax.matshow(np.log10(arr2), cmap='YlOrRd')
+fig.colorbar(im)
+plt.savefig("temp.pdf")
 #%%
 import cooler
 c = cooler.Cooler("cool_files_pancreatic_50k/cool_merged.cool")
