@@ -3,10 +3,11 @@ import combination_classification
 from cooler_extended import CoolerExtended
 import seaborn as sns
 import numpy as np
+import math
 
-resolution = 100
-tissue_type = "panc"
-filepath = f"data/panc100k200k400k500k800k.mcool::/resolutions/{resolution*1000}"
+resolution = 40
+tissue_type = "prost"
+filepath = f"data/HiC40к80k200к400к800к.mcool::/resolutions/{resolution*1000}"
 c = CoolerExtended(filepath)
 bases_in_bin = c.binsize
 sv_master_table = pd.read_csv(f"result_{tissue_type}.csv", delimiter="\t")
@@ -29,38 +30,25 @@ for cr_number in chromosomes:
     # getting normilized hiс matrix by chromosome
     matrix = c.hic_matrices_normalized["chr" + chr_number]
     # getting SVs
-    sv_for_current_chr = sv_master_table[(sv_master_table["chrom1"] == chr_number)&
+    sv_for_chr = pd.DataFrame()
+    sv_for_chr = sv_master_table[(sv_master_table["chrom1"] == chr_number)&
                                  (sv_master_table["chrom2"] == chr_number)]
-
-    sv_for_chr = sv_for_current_chr[sv_for_current_chr["chromo_label1"] != "High confidence"]
-    chr_for_hic = sv_for_current_chr[sv_for_current_chr["chromo_label1"] == "High confidence"]
 
     sv_for_chr = sv_for_chr.drop(columns=['unique_id', 'sv_file_id', 'chrom1', 'chrom2',
                                           'sv_id', 'pe_support', 'strand1', 'strand2', 'svclass',
                                           'svmethod', 'chromo_label1', 'chromo_label2'])
-    chr_for_hic = chr_for_hic.drop(columns=['unique_id', 'sv_file_id', 'chrom1', 'chrom2',
-                                            'sv_id', 'pe_support', 'strand1', 'strand2', 'svclass',
-                                            'svmethod', 'chromo_label1', 'chromo_label2'])
     sv_for_chr['combination_class'] = 'sv'
-    chr_for_hic['combination_class'] = 'chromo'
 
     sv_shifted = getShiftedBins(sv_for_chr)
     sv_shifted['combination_class'] = 'sv_shift_5mb'
 
-    chr_shifted = getShiftedBins(chr_for_hic)
-    chr_shifted['combination_class'] = 'chromo_shift_5mb'
-
     mixed_bins = combination_classification.get_combinations_data_frame(
-        f"{tissue_type}_sv_combinations/{tissue_type}_sv_combinations", cr_number)
+        f"{tissue_type}_sv_combinations/{tissue_type}_sv_combinations", cr_number, False)
 
     random_bins = pd.DataFrame(np.random.randint(0, matrix.shape[0]*resolution*1000, size=(10000, 2)), columns=['start1', 'start2'])
     random_bins['combination_class'] = 'random'
 
-    bins_array = sv_for_chr.append(chr_for_hic)
-    bins_array = bins_array.append(sv_shifted)
-    bins_array = bins_array.append(chr_shifted)
-    bins_array = bins_array.append(mixed_bins)
-    bins_array = bins_array.append(random_bins)
+    bins_array = sv_for_chr.append(mixed_bins)
 
     bins_array = bins_array.groupby(['combination_class'], as_index=False).agg({'start1': list, 'start2': list})
 
@@ -71,35 +59,32 @@ for cr_number in chromosomes:
 all_hic_df = all_hic_df.explode('score')
 #%%
 sns.set_theme(style="whitegrid")
-sns.set(rc={'figure.figsize': (60, 30)})
-plot2 = sns.boxplot(data=all_hic_df, x='type', y='score',
-                    order=["sv", "chromo", "sv_sv_s", "sv_sv_d", "chromo_chromo_s",  "chromo_chromo_d",
-                           "sv_chromo_s", "sv_chromo_d"])
+sns.set(rc={'figure.figsize': (20, 20)})
+plot2 = sns.boxplot(data=all_hic_df.explode('score'), x='type', y='score',
+                    order=["sv", "comb_s", "comb_d"])
 plot2.set_title("All chromosomes", fontsize=30)
 # plot2.set_yscale("log")
-plot2.set_ylim([0, 3])
-plot2.axhline(1)
-plot2.set_xticklabels(plot2.get_xticklabels(), fontsize=30, rotation=45)
+plot2.set_xticklabels(plot2.get_xticklabels(), fontsize=30)
 plot2.set_yticklabels(plot2.get_yticklabels(), fontsize=30)
 plot2.set_ylabel(plot2.get_ylabel(), fontsize=30)
 plot2.set_xlabel(plot2.get_xlabel(), fontsize=30)
-#plot2.figure.savefig(f"{tissue_type}_boxplot_combinations{resolution}k.pdf")
-plot2.figure.savefig(f"{tissue_type}_boxplot_combinations{resolution}k.png")
-
+plot2.set_ylim([0, 3])
+plot2.axhline(1)
+plot2.figure.savefig(f"{tissue_type}_boxplot_combinations{resolution}k_no_chromo.pdf")
 #%%
 all_hic_df = all_hic_df.groupby(['type'], as_index=False).agg({'score': list})
+mean_table = pd.read_csv(f"{tissue_type}_mean_table_nosh.csv", delimiter="\t")
 #mean_table = pd.DataFrame()
-mean_table = pd.read_csv(f"{tissue_type}_mean_table.csv", delimiter="\t")
-mean_table[f'{str(resolution)}k'] = [np.mean(sv_score) for sv_score in all_hic_df["score"]]
-mean_table['combination_class'] = [sv_type for sv_type in all_hic_df['type']]
-mean_table.to_csv(f"{tissue_type}_mean_table.csv", sep="\t")
+mean_table[f'{str(resolution)}k'] = [np.nanmean(sv_score) for sv_score in all_hic_df["score"]]
+mean_table['combination_class'] = [sv_type for sv_type in all_hic_df["type"]]
+mean_table.to_csv(f"{tissue_type}_mean_table_nosh.csv", sep="\t")
 
-import  math
 #median_table = pd.DataFrame()
-median_table = pd.read_csv(f"{tissue_type}_median_table.csv", delimiter="\t")
+median_table = pd.read_csv(f"{tissue_type}_median_table_nosh.csv", delimiter="\t")
 def median(array):
     a = [0 if math.isnan(x) else x for x in array]
     return np.percentile(a, 50)
 median_table[f'{str(resolution)}k'] = [median(sv_score) for sv_score in all_hic_df["score"]]
 median_table['combination_class'] = [sv_type for sv_type in all_hic_df["type"]]
-median_table.to_csv(f"{tissue_type}_median_table.csv", sep="\t")
+median_table.to_csv(f"{tissue_type}_median_table_nosh.csv", sep="\t")
+

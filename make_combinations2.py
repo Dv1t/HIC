@@ -6,7 +6,7 @@ min_bin_dist = 60000
 
 for chrom_number in chromosomes:
 
-    sv_master_table = pd.read_csv("result_prost.csv", delimiter="\t")
+    sv_master_table = pd.read_csv("result_panc.csv", delimiter="\t")
     sv_master_table = sv_master_table[(sv_master_table.chrom1 == sv_master_table.chrom2) &
                                       (sv_master_table.chrom1 == chrom_number)]
     sv_master_table = sv_master_table.loc[(sv_master_table["start1"]-sv_master_table["start2"]).abs() > min_bin_dist]
@@ -32,4 +32,4 @@ for chrom_number in chromosomes:
                               columns=["start1", "start2", "chromo_label1", "chromo_label2", "same_patient", "chrom",
                                        "unique_id", 'sv_id1', 'sv_id2'])
 
-    mixed_bins.to_csv(f"prost_sv_combinations/prost_sv_combinations{chrom_number}.csv", sep="\t")
+    mixed_bins.to_csv(f"panc_sv_combinations/panc_sv_combinations{chrom_number}.csv", sep="\t")
